@@ -70,6 +70,11 @@ interface Location {
   type: 'origin' | 'destination';
 }
 
+interface Responsible {
+  id: string;
+  name: string;
+}
+
 type SortDirection = 'asc' | 'desc' | null;
 
 const DailyStatus: React.FC = () => {
@@ -86,6 +91,7 @@ const DailyStatus: React.FC = () => {
   const { data: operations } = useFirestoreCollection<Operation>('operations');
   const { data: industries } = useFirestoreCollection<Industry>('industries');
   const { data: locations } = useFirestoreCollection<Location>('locations');
+  const { data: responsibles } = useFirestoreCollection<Responsible>('responsibles');
 
   // Prepare autocomplete options
   const driverOptions = drivers.map(driver => ({
@@ -127,6 +133,12 @@ const DailyStatus: React.FC = () => {
       label: location.name,
       value: location.name
     }));
+
+  const responsibleOptions = responsibles.map(responsible => ({
+    id: responsible.id,
+    label: responsible.name,
+    value: responsible.name
+  }));
 
   const addRecord = async () => {
     const newRecord: StatusRecord = {
@@ -244,6 +256,18 @@ const DailyStatus: React.FC = () => {
       const aStr = String(aValue).toLowerCase();
       const bStr = String(bValue).toLowerCase();
       
+      // Special handling for numeric strings (like "10" should come after "9")
+      const aNum = parseFloat(aStr);
+      const bNum = parseFloat(bStr);
+      
+      if (!isNaN(aNum) && !isNaN(bNum)) {
+        if (sortDirection === 'asc') {
+          return aNum - bNum;
+        } else {
+          return bNum - aNum;
+        }
+      }
+      
       if (sortDirection === 'asc') {
         return aStr.localeCompare(bStr);
       } else {
@@ -335,37 +359,37 @@ const DailyStatus: React.FC = () => {
   };
 
   const columns = [
-    { key: 'operacao', label: 'OPERAÇÃO', width: 120, type: 'autocomplete', options: operationOptions },
-    { key: 'numero', label: 'Nº', width: 80 },
-    { key: 'industria', label: 'INDÚSTRIA', width: 120, type: 'autocomplete', options: industryOptions },
-    { key: 'horarioPrev', label: 'HORÁRIO PREV.', width: 120, type: 'time' },
-    { key: 'placa', label: 'PLACA', width: 100, type: 'autocomplete', options: vehicleOptions },
-    { key: 'motorista', label: 'MOTORISTA', width: 120, type: 'autocomplete', options: driverOptions },
-    { key: 'origem', label: 'ORIGEM', width: 120, type: 'autocomplete', options: originOptions },
-    { key: 'destino', label: 'DESTINO', width: 120, type: 'autocomplete', options: destinationOptions },
-    { key: 'transporteSAP', label: 'TRANSPORTE SAP', width: 140 },
-    { key: 'rotas', label: 'ROTAS', width: 150 },
-    { key: 'peso', label: 'PESO', width: 100 },
-    { key: 'caixas', label: 'CAIXAS', width: 100 },
-    { key: 'responsavel', label: 'RESPONSÁVEL', width: 120 },
-    { key: 'inicio', label: 'INÍCIO', width: 120, type: 'time' },
-    { key: 'fim', label: 'FIM', width: 120, type: 'time' },
-    { key: 'palletsRefrig', label: 'PALLETS REFRIG.', width: 120, type: 'number' },
-    { key: 'palletsSecos', label: 'PALLETS SECOS', width: 120, type: 'number' },
-    { key: 'qtdPallets', label: 'QTD PALLETS', width: 120, calculated: true },
-    { key: 'separacao', label: 'SEPARAÇÃO', width: 120 },
-    { key: 'observacao', label: 'OBSERVAÇÃO', width: 150 },
-    { key: 'termoPallet', label: 'TERMO PALLET', width: 120 },
-    { key: 'cte', label: 'CTE', width: 100 },
-    { key: 'mdfe', label: 'MDFE', width: 100 },
-    { key: 'ae', label: 'AE', width: 100 },
-    { key: 'saidaOrigem', label: 'ORIGEM', width: 140, type: 'datetime-local' },
-    { key: 'chegadaDest', label: 'DESTINO', width: 140, type: 'datetime-local' },
-    { key: 'docRelFin', label: 'DOC. REL. FIN.', width: 120, type: 'checkbox' },
-    { key: 'docTermoPallet', label: 'DOC. TERMO PALLET', width: 160, type: 'checkbox' },
-    { key: 'docProtoc', label: 'DOC PROTOC.', width: 120, type: 'checkbox' },
-    { key: 'docCanhotos', label: 'DOC CANHOTOS', width: 130, type: 'checkbox' },
-    { key: 'status', label: 'STATUS', width: 120, type: 'select', options: ['Pendente', 'Concluído'] }
+    { key: 'operacao', label: 'OPERAÇÃO', minWidth: 150, type: 'autocomplete', options: operationOptions },
+    { key: 'numero', label: 'Nº', minWidth: 80 },
+    { key: 'industria', label: 'INDÚSTRIA', minWidth: 150, type: 'autocomplete', options: industryOptions },
+    { key: 'horarioPrev', label: 'HORÁRIO PREV.', minWidth: 130, type: 'time' },
+    { key: 'placa', label: 'PLACA', minWidth: 100, type: 'autocomplete', options: vehicleOptions },
+    { key: 'motorista', label: 'MOTORISTA', minWidth: 150, type: 'autocomplete', options: driverOptions },
+    { key: 'origem', label: 'ORIGEM', minWidth: 150, type: 'autocomplete', options: originOptions },
+    { key: 'destino', label: 'DESTINO', minWidth: 150, type: 'autocomplete', options: destinationOptions },
+    { key: 'transporteSAP', label: 'TRANSPORTE SAP', minWidth: 150 },
+    { key: 'rotas', label: 'ROTAS', minWidth: 200 },
+    { key: 'peso', label: 'PESO', minWidth: 100 },
+    { key: 'caixas', label: 'CAIXAS', minWidth: 100 },
+    { key: 'responsavel', label: 'RESPONSÁVEL', minWidth: 150, type: 'autocomplete', options: responsibleOptions },
+    { key: 'inicio', label: 'INÍCIO', minWidth: 120, type: 'time' },
+    { key: 'fim', label: 'FIM', minWidth: 120, type: 'time' },
+    { key: 'palletsRefrig', label: 'PALLETS REFRIG.', minWidth: 130, type: 'number' },
+    { key: 'palletsSecos', label: 'PALLETS SECOS', minWidth: 130, type: 'number' },
+    { key: 'qtdPallets', label: 'QTD PALLETS', minWidth: 120, calculated: true },
+    { key: 'separacao', label: 'SEPARAÇÃO', minWidth: 130 },
+    { key: 'observacao', label: 'OBSERVAÇÃO', minWidth: 200 },
+    { key: 'termoPallet', label: 'TERMO PALLET', minWidth: 130 },
+    { key: 'cte', label: 'CTE', minWidth: 100 },
+    { key: 'mdfe', label: 'MDFE', minWidth: 100 },
+    { key: 'ae', label: 'AE', minWidth: 100 },
+    { key: 'saidaOrigem', label: 'ORIGEM', minWidth: 160, type: 'datetime-local' },
+    { key: 'chegadaDest', label: 'DESTINO', minWidth: 160, type: 'datetime-local' },
+    { key: 'docRelFin', label: 'DOC. REL. FIN.', minWidth: 130, type: 'checkbox' },
+    { key: 'docTermoPallet', label: 'DOC. TERMO PALLET', minWidth: 170, type: 'checkbox' },
+    { key: 'docProtoc', label: 'DOC PROTOC.', minWidth: 120, type: 'checkbox' },
+    { key: 'docCanhotos', label: 'DOC CANHOTOS', minWidth: 140, type: 'checkbox' },
+    { key: 'status', label: 'STATUS', minWidth: 120, type: 'select', options: ['Pendente', 'Concluído'] }
   ];
 
   return (
@@ -404,16 +428,22 @@ const DailyStatus: React.FC = () => {
       </div>
 
       <div className="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
-        <div className="overflow-auto max-h-[70vh]" style={{ maxWidth: '100%' }}>
+        <div className="overflow-x-auto max-h-[70vh]">
           <table className="w-full text-sm">
+            <colgroup>
+              <col style={{ width: '48px' }} />
+              {columns.map((column) => (
+                <col key={column.key} style={{ minWidth: column.minWidth }} />
+              ))}
+            </colgroup>
             <thead className="bg-gray-700 sticky top-0 z-10">
               <tr>
                 <th className="w-12 px-2 py-3 text-orange-500 font-semibold">Ações</th>
                 {columns.map((column) => (
                   <th
                     key={column.key}
-                    className="text-left py-3 px-2 text-orange-500 font-semibold border-l border-gray-600 cursor-pointer hover:bg-gray-600 transition-colors"
-                    style={{ minWidth: column.width }}
+                    className="text-left py-3 px-2 text-orange-500 font-semibold border-l border-gray-600 cursor-pointer hover:bg-gray-600 transition-colors whitespace-nowrap"
+                    style={{ minWidth: column.minWidth }}
                     onClick={() => handleSort(column.key)}
                   >
                     <div className="flex items-center space-x-1">
@@ -446,7 +476,7 @@ const DailyStatus: React.FC = () => {
                   {columns.map((column) => (
                     <td key={column.key} className="py-2 px-2 border-l border-gray-700">
                       {column.calculated ? (
-                        <span className="text-gray-300">
+                        <span className="text-gray-300 whitespace-nowrap">
                           {((parseInt(record.palletsRefrig) || 0) + (parseInt(record.palletsSecos) || 0)).toString()}
                         </span>
                       ) : column.type === 'checkbox' ? (
@@ -472,7 +502,7 @@ const DailyStatus: React.FC = () => {
                           onChange={(value) => updateRecord(record.id, column.key as keyof StatusRecord, value)}
                           options={column.options || []}
                           placeholder=""
-                          className="min-w-0"
+                          className="w-full"
                         />
                       ) : (
                         <input
@@ -480,7 +510,6 @@ const DailyStatus: React.FC = () => {
                           value={record[column.key as keyof StatusRecord] as string}
                           onChange={(e) => updateRecord(record.id, column.key as keyof StatusRecord, e.target.value)}
                           className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-white text-xs focus:border-orange-500"
-                          style={{ minWidth: column.width - 20 }}
                         />
                       )}
                     </td>
