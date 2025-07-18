@@ -81,6 +81,7 @@ const DailyStatus: React.FC = () => {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>(null);
+  const [selectedWeightRecords, setSelectedWeightRecords] = useState<Set<string>>(new Set());
   
   const dateStr = format(selectedDate, 'yyyy-MM-dd');
   const { data: records } = useFirestoreCollection<StatusRecord>('daily-status', selectedDate);
@@ -308,7 +309,6 @@ const DailyStatus: React.FC = () => {
       // Prepare data for Excel
       const excelData = dataToExport.map(record => ({
         'OPERAÇÃO': record.operacao,
-        'Nº': record.numero,
         'INDÚSTRIA': record.industria,
         'HORÁRIO PREV.': record.horarioPrev,
         'PLACA': record.placa,
@@ -358,6 +358,43 @@ const DailyStatus: React.FC = () => {
     }
   };
 
+  // Calculate weight totals
+  const calculateWeightTotals = () => {
+    const selectedRecords = records.filter(record => selectedWeightRecords.has(record.id));
+    
+    const totalWeight = selectedRecords.reduce((sum, record) => {
+      const weight = parseFloat(record.peso.replace(/\./g, '').replace(',', '.')) || 0;
+      return sum + weight;
+    }, 0);
+
+    // Weight by industry for all records (not just selected)
+    const weightByIndustry = records.reduce((acc, record) => {
+      if (record.industria) {
+        const weight = parseFloat(record.peso.replace(/\./g, '').replace(',', '.')) || 0;
+        acc[record.industria] = (acc[record.industria] || 0) + weight;
+      }
+      return acc;
+    }, {} as Record<string, number>);
+
+    return { totalWeight, weightByIndustry };
+  };
+
+  const { totalWeight, weightByIndustry } = calculateWeightTotals();
+
+  const toggleWeightSelection = (recordId: string) => {
+    const newSelection = new Set(selectedWeightRecords);
+    if (newSelection.has(recordId)) {
+      newSelection.delete(recordId);
+    } else {
+      newSelection.add(recordId);
+    }
+    setSelectedWeightRecords(newSelection);
+  };
+
+  const formatWeight = (weight: number) => {
+    return weight.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+
   const columns = [
     { key: 'operacao', label: 'OPERAÇÃO', minWidth: 150, type: 'autocomplete', options: operationOptions },
     { key: 'numero', label: 'Nº', minWidth: 80 },
@@ -369,7 +406,7 @@ const DailyStatus: React.FC = () => {
     { key: 'destino', label: 'DESTINO', minWidth: 150, type: 'autocomplete', options: destinationOptions },
     { key: 'transporteSAP', label: 'TRANSPORTE SAP', minWidth: 150 },
     { key: 'rotas', label: 'ROTAS', minWidth: 200 },
-    { key: 'peso', label: 'PESO', minWidth: 100 },
+    { key: 'peso', label: 'PESO', minWidth: 100, hasFlag: true },
     { key: 'caixas', label: 'CAIXAS', minWidth: 100 },
     { key: 'responsavel', label: 'RESPONSÁVEL', minWidth: 150, type: 'autocomplete', options: responsibleOptions },
     { key: 'inicio', label: 'INÍCIO', minWidth: 120, type: 'time' },
@@ -394,8 +431,50 @@ const DailyStatus: React.FC = () => {
 
   return (
     <div className="p-6">
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-6">
-        <h1 className="text-3xl font-bold text-white mb-4 lg:mb-0">Status Diário</h1>
+      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between mb-6 gap-4">
+        <div className="flex flex-col lg:flex-row lg:items-center gap-6">
+          <h1 className="text-3xl font-bold text-white">Status Diário</h1>
+          
+          {/* Weight Information Panel */}
+          <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+            <h3 className="text-lg font-semibold text-orange-500 mb-2">Informações de Peso</h3>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Selected Weight Info */}
+              <div>
+                <p className="text-orange-500 font-medium mb-2">Peso Selecionado:</p>
+                {selectedWeightRecords.size > 0 ? (
+                  <div>
+                    <p className="text-gray-300 text-sm">
+                      <span className="font-medium">Total:</span> {formatWeight(totalWeight)} kg
+                    </p>
+                    <p className="text-gray-400 text-xs">
+                      ({selectedWeightRecords.size} registro{selectedWeightRecords.size !== 1 ? 's' : ''})
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-gray-400 text-sm">Selecione registros na coluna PESO</p>
+                )}
+              </div>
+              
+              {/* Weight by Industry - Always visible */}
+              <div>
+                <p className="text-orange-500 font-medium mb-2">Peso por Indústria:</p>
+                {Object.keys(weightByIndustry).length > 0 ? (
+                  <div className="space-y-1">
+                    {Object.entries(weightByIndustry).map(([industry, weight]) => (
+                      <p key={industry} className="text-gray-300 text-sm">
+                        <span className="font-medium">{industry}:</span> {formatWeight(weight)} kg
+                      </p>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-gray-400 text-sm">Nenhum peso informado</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+        
         <div className="flex flex-col sm:flex-row gap-4">
           <DateSelector
             selectedDate={selectedDate}
@@ -475,7 +554,22 @@ const DailyStatus: React.FC = () => {
                   </td>
                   {columns.map((column) => (
                     <td key={column.key} className="py-2 px-2 border-l border-gray-700">
-                      {column.calculated ? (
+                      {column.hasFlag ? (
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="checkbox"
+                            checked={selectedWeightRecords.has(record.id)}
+                            onChange={() => toggleWeightSelection(record.id)}
+                            className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500"
+                          />
+                          <input
+                            type="text"
+                            value={record[column.key as keyof StatusRecord] as string}
+                            onChange={(e) => updateRecord(record.id, column.key as keyof StatusRecord, e.target.value)}
+                            className="flex-1 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-white text-xs focus:border-orange-500"
+                          />
+                        </div>
+                      ) : column.calculated ? (
                         <span className="text-gray-300 whitespace-nowrap">
                           {((parseInt(record.palletsRefrig) || 0) + (parseInt(record.palletsSecos) || 0)).toString()}
                         </span>
