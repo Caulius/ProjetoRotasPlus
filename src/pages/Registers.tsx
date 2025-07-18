@@ -31,8 +31,13 @@ interface Location {
   type: 'origin' | 'destination';
 }
 
+interface Responsible {
+  id: string;
+  name: string;
+}
+
 const Registers: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'drivers' | 'vehicles' | 'operations' | 'industries' | 'locations'>('drivers');
+  const [activeTab, setActiveTab] = useState<'drivers' | 'vehicles' | 'operations' | 'industries' | 'locations' | 'responsibles'>('drivers');
   
   // Fetch data from Firestore
   const { data: drivers } = useFirestoreCollection<Driver>('drivers');
@@ -40,6 +45,7 @@ const Registers: React.FC = () => {
   const { data: operations } = useFirestoreCollection<Operation>('operations');
   const { data: industries } = useFirestoreCollection<Industry>('industries');
   const { data: locations } = useFirestoreCollection<Location>('locations');
+  const { data: responsibles } = useFirestoreCollection<Responsible>('responsibles');
 
   // Editing states
   const [editingDriver, setEditingDriver] = useState<Driver | null>(null);
@@ -47,13 +53,15 @@ const Registers: React.FC = () => {
   const [editingOperation, setEditingOperation] = useState<Operation | null>(null);
   const [editingIndustry, setEditingIndustry] = useState<Industry | null>(null);
   const [editingLocation, setEditingLocation] = useState<Location | null>(null);
+  const [editingResponsible, setEditingResponsible] = useState<Responsible | null>(null);
 
   const tabs = [
     { key: 'drivers', label: 'Motoristas' },
     { key: 'vehicles', label: 'Placas' },
     { key: 'operations', label: 'Operações' },
     { key: 'industries', label: 'Indústrias' },
-    { key: 'locations', label: 'Origens/Destinos' }
+    { key: 'locations', label: 'Origens/Destinos' },
+    { key: 'responsibles', label: 'Responsáveis' }
   ];
 
   // Driver functions
@@ -228,6 +236,41 @@ const Registers: React.FC = () => {
       toast.success('Local removido!');
     } catch (error) {
       toast.error('Erro ao remover local');
+    }
+  };
+
+  // Responsible functions
+  const addResponsible = () => {
+    setEditingResponsible({ id: '', name: '' });
+  };
+
+  const saveResponsible = async () => {
+    if (!editingResponsible?.name.trim()) {
+      toast.error('Nome é obrigatório');
+      return;
+    }
+
+    try {
+      if (editingResponsible.id) {
+        await updateFirestore('responsibles', editingResponsible.id, editingResponsible);
+        toast.success('Responsável atualizado!');
+      } else {
+        const newResponsible = { ...editingResponsible, id: Date.now().toString() };
+        await saveToFirestore('responsibles', newResponsible.id, newResponsible);
+        toast.success('Responsável adicionado!');
+      }
+      setEditingResponsible(null);
+    } catch (error) {
+      toast.error('Erro ao salvar responsável');
+    }
+  };
+
+  const deleteResponsible = async (id: string) => {
+    try {
+      await deleteFromFirestore('responsibles', id);
+      toast.success('Responsável removido!');
+    } catch (error) {
+      toast.error('Erro ao remover responsável');
     }
   };
 
@@ -769,6 +812,97 @@ const Registers: React.FC = () => {
             {locations.length === 0 && (
               <div className="text-center py-8 text-gray-400">
                 Nenhum local cadastrado
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Responsibles Tab */}
+      {activeTab === 'responsibles' && (
+        <div className="space-y-6">
+          <div className="flex justify-between items-center">
+            <h2 className="text-xl font-semibold text-white">Responsáveis</h2>
+            <button
+              onClick={addResponsible}
+              className="flex items-center space-x-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors"
+            >
+              <Plus className="h-4 w-4" />
+              <span>Adicionar Responsável</span>
+            </button>
+          </div>
+
+          {editingResponsible && (
+            <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+              <h3 className="text-lg font-medium text-white mb-4">
+                {editingResponsible.id ? 'Editar Responsável' : 'Novo Responsável'}
+              </h3>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">
+                  Nome *
+                </label>
+                <input
+                  type="text"
+                  value={editingResponsible.name}
+                  onChange={(e) => setEditingResponsible({ ...editingResponsible, name: e.target.value })}
+                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
+                  placeholder="Nome do responsável"
+                />
+              </div>
+              <div className="flex justify-end space-x-3 mt-4">
+                <button
+                  onClick={() => setEditingResponsible(null)}
+                  className="flex items-center space-x-2 px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors"
+                >
+                  <X className="h-4 w-4" />
+                  <span>Cancelar</span>
+                </button>
+                <button
+                  onClick={saveResponsible}
+                  className="flex items-center space-x-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
+                >
+                  <Save className="h-4 w-4" />
+                  <span>Salvar</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
+            <table className="w-full">
+              <thead className="bg-gray-700">
+                <tr>
+                  <th className="text-left py-3 px-4 text-orange-500 font-semibold">Nome</th>
+                  <th className="text-left py-3 px-4 text-orange-500 font-semibold">Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                {responsibles.map((responsible) => (
+                  <tr key={responsible.id} className="border-b border-gray-700 hover:bg-gray-700">
+                    <td className="py-3 px-4 text-white">{responsible.name}</td>
+                    <td className="py-3 px-4">
+                      <div className="flex space-x-2">
+                        <button
+                          onClick={() => setEditingResponsible(responsible)}
+                          className="text-blue-400 hover:text-blue-300"
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => deleteResponsible(responsible.id)}
+                          className="text-red-400 hover:text-red-300"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {responsibles.length === 0 && (
+              <div className="text-center py-8 text-gray-400">
+                Nenhum responsável cadastrado
               </div>
             )}
           </div>
