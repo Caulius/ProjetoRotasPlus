@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Plus, Edit2, Trash2, Save, X } from 'lucide-react';
 import { useFirestoreCollection, saveToFirestore, updateFirestore, deleteFromFirestore } from '../hooks/useFirestore';
+import { collection, query, where, getDocs, doc, updateDoc, deleteDoc, writeBatch } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 import toast from 'react-hot-toast';
 
 interface Driver {
@@ -38,6 +40,9 @@ interface Responsible {
 
 const Registers: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'drivers' | 'vehicles' | 'operations' | 'industries' | 'locations' | 'responsibles'>('drivers');
+  const [isImporting, setIsImporting] = useState(false);
+  const [mobileUsers, setMobileUsers] = useState<any[]>([]);
+  const [showMobileUsers, setShowMobileUsers] = useState(false);
   
   // Fetch data from Firestore
   const { data: drivers } = useFirestoreCollection<Driver>('drivers');
@@ -64,6 +69,68 @@ const Registers: React.FC = () => {
     { key: 'responsibles', label: 'Responsáveis' }
   ];
 
+  // Debug: List all mobile users
+  const listMobileUsers = async () => {
+    try {
+      const mobileUsersSnapshot = await getDocs(collection(db, 'mobile-users'));
+      const users = mobileUsersSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setMobileUsers(users);
+      setShowMobileUsers(true);
+      console.log('Mobile users:', users);
+    } catch (error) {
+      console.error('Error listing mobile users:', error);
+      toast.error('Erro ao listar usuários mobile');
+    }
+  };
+
+  // Import existing drivers to mobile users
+  const importExistingDrivers = async () => {
+    setIsImporting(true);
+    try {
+      const batch = writeBatch(db);
+      let importedCount = 0;
+
+      for (const driver of drivers) {
+        // Check if mobile user already exists
+        const mobileUserQuery = query(
+          collection(db, 'mobile-users'),
+          where('username', '==', driver.name)
+        );
+        const mobileUserSnapshot = await getDocs(mobileUserQuery);
+        
+        if (mobileUserSnapshot.empty) {
+          // Create mobile user
+          const mobileUserId = `mobile-${driver.id}`;
+          const mobileUserRef = doc(db, 'mobile-users', mobileUserId);
+          
+          batch.set(mobileUserRef, {
+            username: driver.name,
+            name: driver.name,
+            password: '12345',
+            role: 'driver',
+            createdAt: new Date().toISOString()
+          });
+          
+          importedCount++;
+        }
+      }
+      
+      if (importedCount > 0) {
+        await batch.commit();
+        toast.success(`${importedCount} motoristas importados para o app mobile!`);
+      } else {
+        toast.info('Todos os motoristas já estão sincronizados com o app mobile');
+      }
+    } catch (error) {
+      console.error('Error importing drivers:', error);
+      toast.error('Erro ao importar motoristas');
+    } finally {
+      setIsImporting(false);
+    }
+  };
   // Driver functions
   const addDriver = () => {
     setEditingDriver({ id: '', name: '', phone: '' });
@@ -78,23 +145,67 @@ const Registers: React.FC = () => {
     try {
       if (editingDriver.id) {
         await updateFirestore('drivers', editingDriver.id, editingDriver);
+        
+        // Update mobile user if exists
+        const mobileUserQuery = query(
+          collection(db, 'mobile-users'),
+          where('username', '==', editingDriver.name)
+        );
+        const mobileUserSnapshot = await getDocs(mobileUserQuery);
+        
+        if (!mobileUserSnapshot.empty) {
+          const mobileUserDoc = mobileUserSnapshot.docs[0];
+          await updateDoc(doc(db, 'mobile-users', mobileUserDoc.id), {
+            name: editingDriver.name,
+            username: editingDriver.name
+          });
+        }
+        
         toast.success('Motorista atualizado!');
       } else {
         const newDriver = { ...editingDriver, id: Date.now().toString() };
         await saveToFirestore('drivers', newDriver.id, newDriver);
+        
+        // Create mobile user automatically
+        const mobileUserId = `mobile-${newDriver.id}`;
+        await saveToFirestore('mobile-users', mobileUserId, {
+          username: newDriver.name,
+          name: newDriver.name,
+          password: '12345',
+          role: 'driver',
+          createdAt: new Date().toISOString()
+        });
+        
         toast.success('Motorista adicionado!');
       }
       setEditingDriver(null);
     } catch (error) {
+      console.error('Error saving driver:', error);
       toast.error('Erro ao salvar motorista');
     }
   };
 
   const deleteDriver = async (id: string) => {
     try {
+      const driverToDelete = drivers.find(d => d.id === id);
+      if (driverToDelete) {
+        // Delete mobile user if exists
+        const mobileUserQuery = query(
+          collection(db, 'mobile-users'),
+          where('username', '==', driverToDelete.name)
+        );
+        const mobileUserSnapshot = await getDocs(mobileUserQuery);
+        
+        if (!mobileUserSnapshot.empty) {
+          const mobileUserDoc = mobileUserSnapshot.docs[0];
+          await deleteDoc(doc(db, 'mobile-users', mobileUserDoc.id));
+        }
+      }
+      
       await deleteFromFirestore('drivers', id);
       toast.success('Motorista removido!');
     } catch (error) {
+      console.error('Error deleting driver:', error);
       toast.error('Erro ao remover motorista');
     }
   };
@@ -302,13 +413,28 @@ const Registers: React.FC = () => {
         <div className="space-y-6">
           <div className="flex justify-between items-center">
             <h2 className="text-xl font-semibold text-white">Motoristas</h2>
-            <button
-              onClick={addDriver}
-              className="flex items-center space-x-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors"
-            >
-              <Plus className="h-4 w-4" />
-              <span>Adicionar Motorista</span>
-            </button>
+            <div className="flex space-x-3">
+              <button
+                onClick={importExistingDrivers}
+                disabled={isImporting}
+                className="flex items-center space-x-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+              >
+                <span>{isImporting ? 'Importando...' : 'Sincronizar App Mobile'}</span>
+              </button>
+              <button
+                onClick={listMobileUsers}
+                className="flex items-center space-x-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors"
+              >
+                <span>Ver Usuários Mobile</span>
+              </button>
+              <button
+                onClick={addDriver}
+                className="flex items-center space-x-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors"
+              >
+                <Plus className="h-4 w-4" />
+                <span>Adicionar Motorista</span>
+              </button>
+            </div>
           </div>
 
           {editingDriver && (
@@ -401,6 +527,34 @@ const Registers: React.FC = () => {
               </div>
             )}
           </div>
+
+          {/* Mobile Users Debug */}
+          {showMobileUsers && (
+            <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium text-white">Usuários Mobile ({mobileUsers.length})</h3>
+                <button
+                  onClick={() => setShowMobileUsers(false)}
+                  className="text-gray-400 hover:text-white"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <div className="space-y-2">
+                {mobileUsers.map((user) => (
+                  <div key={user.id} className="bg-gray-900 rounded p-3 text-sm">
+                    <p className="text-white"><strong>Nome:</strong> {user.name}</p>
+                    <p className="text-gray-300"><strong>Username:</strong> {user.username}</p>
+                    <p className="text-gray-300"><strong>Senha:</strong> {user.password}</p>
+                    <p className="text-gray-300"><strong>Role:</strong> {user.role}</p>
+                  </div>
+                ))}
+                {mobileUsers.length === 0 && (
+                  <p className="text-gray-400 text-center py-4">Nenhum usuário mobile encontrado</p>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
