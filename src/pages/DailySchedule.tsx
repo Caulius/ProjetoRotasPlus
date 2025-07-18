@@ -18,6 +18,7 @@ interface Destination {
 
 interface Vehicle {
   id: string;
+  numero: string;
   plate: string;
   driver: string;
   origin: string;
@@ -188,6 +189,7 @@ const DailySchedule: React.FC = () => {
   const addVehicle = async (scheduleId: string) => {
     const newVehicle: Vehicle = {
       id: Date.now().toString(),
+      numero: '',
       plate: '',
       driver: '',
       origin: '',
@@ -282,6 +284,58 @@ const DailySchedule: React.FC = () => {
   };
 
   const updateVehicle = async (scheduleId: string, vehicleId: string, field: keyof Vehicle, value: any) => {
+    // If updating numero field, auto-populate other fields from daily status
+    if (field === 'numero' && value) {
+      const matchingRecords = statusRecords.filter(record => record.numero === value);
+      if (matchingRecords.length > 0) {
+        // Use the first record for basic info, collect all transport SAP values
+        const primaryRecord = matchingRecords[0];
+        const allTransportSAP = matchingRecords
+          .filter(record => record.transporteSAP)
+          .map(record => record.transporteSAP);
+        
+        const updatedSchedules = localSchedules.map(schedule => 
+          schedule.id === scheduleId
+            ? {
+                ...schedule,
+                vehicles: schedule.vehicles.map(vehicle =>
+                  vehicle.id === vehicleId
+                    ? { 
+                        ...vehicle, 
+                        numero: value,
+                        plate: primaryRecord.placa || vehicle.plate,
+                        driver: primaryRecord.motorista || vehicle.driver,
+                        origin: primaryRecord.origem || vehicle.origin,
+                        originTime: primaryRecord.horarioPrev || vehicle.originTime,
+                        transporteSAP: allTransportSAP.length > 0 ? allTransportSAP : vehicle.transporteSAP,
+                        // Auto-populate first destination if available
+                        destinations: primaryRecord.destino ? [
+                          {
+                            id: Date.now().toString(),
+                            name: primaryRecord.destino,
+                            time: '',
+                            observation: ''
+                          }
+                        ] : vehicle.destinations
+                      }
+                    : vehicle
+                )
+              }
+            : schedule
+        );
+        
+        try {
+          const schedule = updatedSchedules.find(s => s.id === scheduleId);
+          if (schedule) await saveToFirestore('schedules', scheduleId, schedule);
+          setLocalSchedules(updatedSchedules);
+          toast.success(`Dados importados automaticamente! ${allTransportSAP.length} Transporte(s) SAP encontrado(s).`);
+        } catch (error) {
+          console.error('Erro ao atualizar veículo:', error);
+        }
+        return;
+      }
+    }
+
     const updatedSchedules = localSchedules.map(schedule => 
       schedule.id === scheduleId
         ? {
@@ -399,7 +453,6 @@ const DailySchedule: React.FC = () => {
           schedule.vehicles.forEach(vehicle => {
             const vehicleData = {
               'PROGRAMAÇÃO': schedule.name,
-              'DATA': dateStr,
               'PLACA': vehicle.plate,
               'MOTORISTA': vehicle.driver,
               'ORIGEM': vehicle.origin,
@@ -563,6 +616,19 @@ const DailySchedule: React.FC = () => {
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-1">
+                        Nº
+                      </label>
+                      <input
+                        type="text"
+                        value={vehicle.numero}
+                        onChange={(e) => updateVehicle(schedule.id, vehicle.id, 'numero', e.target.value)}
+                        className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
+                        placeholder="Número"
+                      />
+                    </div>
+
                     <div>
                       <label className="block text-sm font-medium text-gray-300 mb-1">
                         Placa *
