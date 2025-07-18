@@ -145,6 +145,16 @@ const DailySchedule: React.FC = () => {
     }
   };
 
+  const deleteSchedule = async (scheduleId: string) => {
+    try {
+      await deleteFromFirestore('schedules', scheduleId);
+      setLocalSchedules(localSchedules.filter(schedule => schedule.id !== scheduleId));
+      toast.success('Programação removida!');
+    } catch (error) {
+      toast.error('Erro ao remover programação');
+    }
+  };
+
   const updateScheduleName = async (scheduleId: string, newName: string) => {
     try {
       await updateFirestore('schedules', scheduleId, { name: newName });
@@ -507,13 +517,22 @@ const DailySchedule: React.FC = () => {
                   </button>
                 </div>
               )}
-              <button
-                onClick={() => addVehicle(schedule.id)}
-                className="flex items-center space-x-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors"
-              >
-                <Plus className="h-4 w-4" />
-                <span>Adicionar Veículo</span>
-              </button>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => addVehicle(schedule.id)}
+                  className="flex items-center space-x-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>Adicionar Veículo</span>
+                </button>
+                <button
+                  onClick={() => deleteSchedule(schedule.id)}
+                  className="flex items-center space-x-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  <span>Excluir Programação</span>
+                </button>
+              </div>
             </div>
 
             <div className="space-y-4">
