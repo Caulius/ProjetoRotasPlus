@@ -73,6 +73,7 @@ const Import: React.FC = () => {
         const statusRecord = {
           id: recordId,
           date: dateStr,
+          industria: 'LACTALIS',
           transporteSAP: item.transporteSAP,
           rotas: item.rotas,
           peso: item.peso,
@@ -80,7 +81,6 @@ const Import: React.FC = () => {
           // Initialize other fields as empty
           operacao: '',
           numero: '',
-          industria: '',
           horarioPrev: '',
           placa: '',
           motorista: '',
